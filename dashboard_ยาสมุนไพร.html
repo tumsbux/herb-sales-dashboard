@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard โปรเจคยาสมุนไพร</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #faf8fc;
+    --card: #ffffff;
+    --card2: #f3eefb;
+    --text: #4b4458;
+    --muted: #8d84a0;
+    --accent: #5eb8a7;
+    --green: #74c69d;
+    --red: #e8879a;
+    --yellow: #e8c468;
+    --border: #e6dff0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', 'Sarabun', Tahoma, sans-serif;
+    margin: 0;
+    padding: 20px;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .kpi {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .kpi .label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .kpi .value { font-size: 20px; font-weight: 700; text-align: right; }
+  .kpi .sub { font-size: 11px; color: var(--muted); margin-top: 4px; text-align: right; }
+  .growth-pos { color: var(--green); }
+  .growth-neg { color: var(--red); }
+  .section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .section h2 {
+    font-size: 15px;
+    margin: 0 0 12px 0;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .controls { display:flex; gap: 8px; align-items:center; flex-wrap: wrap; }
+  select, input[type=text] {
+    background: var(--card2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .btn-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .btn-toggle button {
+    background: var(--card2);
+    color: var(--muted);
+    border: none;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn-toggle button.active { background: var(--accent); color: #0f172a; font-weight: 600; }
+  .btn-export {
+    background: var(--card2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .btn-export:hover { border-color: var(--accent); color: var(--accent); }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); text-align: left; cursor: pointer; position: sticky; top:0; background: var(--card); }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.text-cell { text-align: left; }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  .table-wrap { max-height: 420px; overflow-y: auto; overflow-x:auto; }
+  .rank { color: var(--muted); text-align:right; }
+  .badge { padding: 2px 6px; border-radius: 4px; font-size: 10.5px; }
+  .badge-warn { background: rgba(232,135,154,0.18); color: var(--red); }
+  .badge-ok { background: rgba(116,198,157,0.18); color: var(--green); }
+  .badge-watch { background: rgba(232,196,104,0.20); color: var(--yellow); }
+  .analysis p { line-height: 1.8; font-size: 13.5px; margin: 0 0 12px 0; }
+  .analysis h3 { font-size: 14px; color: var(--accent); margin: 18px 0 8px 0; }
+  .analysis ul { margin: 6px 0 14px 20px; padding:0; font-size: 13px; line-height: 1.8;}
+  .note { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+  .chart-wrap { height: 260px; }
+  .flex-row { display:flex; gap:16px; flex-wrap:wrap; }
+  .flex-row > div { flex:1; min-width: 300px; }
+  @media print {
+    body * { visibility: hidden; }
+    .print-target, .print-target * { visibility: visible; }
+    .print-target { position: absolute; left: 0; top: 0; width: 100%; }
+    .controls, .btn-export, .btn-toggle { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Dashboard โปรเจคยาสมุนไพร</h1>
+<div class="subtitle" id="subtitle">กำลังโหลดข้อมูล...</div>
+
+<div class="kpi-row" id="kpiRow"></div>
+
+<div class="section">
+  <h2>แนวโน้มยอดขายรายเดือน (เทียบปีก่อน)</h2>
+  <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+  <div class="note">หมายเหตุ: ยอดเดือน ก.ค. 2569 เป็นข้อมูลถึงวันที่ 15 ก.ค. เท่านั้น (ครึ่งเดือน) ไม่ควรเทียบตรงกับเดือนเต็ม</div>
+</div>
+
+<div class="section" id="prodSection">
+  <h2>
+    <span>ตารางสินค้า (กลุ่ม: ยาสมุนไพร)</span>
+    <div class="controls">
+      <div class="btn-toggle" id="periodToggleProd">
+        <button data-period="jul" class="active">ก.ค. 2569 (ล่าสุด)</button>
+        <button data-period="ytd">สะสม ม.ค.68–ก.ค.69</button>
+      </div>
+      <input type="text" id="prodSearch" placeholder="ค้นหาสินค้า / Parcode">
+      <button class="btn-export" onclick="exportExcel('prodTable','สินค้ายาสมุนไพร')">Export Excel</button>
+      <button class="btn-export" onclick="exportPDF('prodSection')">Export PDF</button>
+    </div>
+  </h2>
+  <div class="table-wrap"><table id="prodTable"></table></div>
+  <div class="note">Stock Cover = onhand ÷ อัตราขายเฉลี่ยต่อเดือน (คำนวณจากยอดขายสะสม 19 เดือน) ยิ่งค่าสูง = สต็อกค้างนาน</div>
+</div>
+
+<div class="section" id="branchSection">
+  <h2>
+    <span>ตารางสาขา (เรียงยอดขายมาก→น้อย)</span>
+    <div class="controls">
+      <div class="btn-toggle" id="periodToggleBranch">
+        <button data-period="jul" class="active">ก.ค. 2569</button>
+        <button data-period="ytd">สะสม YTD</button>
+      </div>
+      <select id="dmFilter"><option value="">ทุก DM</option></select>
+      <select id="rmFilter"><option value="">ทุก RM</option></select>
+      <button class="btn-export" onclick="exportExcel('branchTable','สาขายาสมุนไพร')">Export Excel</button>
+      <button class="btn-export" onclick="exportPDF('branchSection')">Export PDF</button>
+    </div>
+  </h2>
+  <div class="table-wrap"><table id="branchTable"></table></div>
+  <div class="note">หมายเหตุ: ตัดรหัสที่ไม่ใช่สาขาจริง (เช่น 901, 902, 213, 230, 205, 999) ออกจากตารางแล้ว</div>
+</div>
+
+<div class="flex-row">
+  <div class="section" id="dmSection">
+    <h2>
+      <span>สรุปตาม DM (ผู้จัดการเขต)</span>
+      <div class="controls">
+        <button class="btn-export" onclick="exportExcel('dmTable','DM_ยาสมุนไพร')">Excel</button>
+        <button class="btn-export" onclick="exportPDF('dmSection')">PDF</button>
+      </div>
+    </h2>
+    <div class="table-wrap"><table id="dmTable"></table></div>
+  </div>
+  <div class="section" id="rmSection">
+    <h2>
+      <span>สรุปตาม RM (ผู้จัดการภูมิภาค)</span>
+      <div class="controls">
+        <button class="btn-export" onclick="exportExcel('rmTable','RM_ยาสมุนไพร')">Excel</button>
+        <button class="btn-export" onclick="exportPDF('rmSection')">PDF</button>
+      </div>
+    </h2>
+    <div class="table-wrap"><table id="rmTable"></table></div>
+  </div>
+</div>
+
+<div class="section analysis" id="analysisSection">
+  <h2>
+    <span>บทวิเคราะห์และคำแนะนำจาก AI</span>
+    <div class="controls">
+      <button class="btn-export" onclick="exportPDF('analysisSection')">Export PDF</button>
+    </div>
+  </h2>
+  <div id="analysisContent"></div>
+</div>
+
+<script id="dashboard-data" type="application/json">{"monthly": [{"ym": "2025-01", "qty": 3054.0, "sales": 96808.18, "bills": 2314}, {"ym": "2025-02", "qty": 2767.0, "sales": 87861.0, "bills": 2004}, {"ym": "2025-03", "qty": 2986.0, "sales": 87019.54, "bills": 2525}, {"ym": "2025-04", "qty": 3121.0, "sales": 87728.36, "bills": 2675}, {"ym": "2025-05", "qty": 3870.0, "sales": 118240.24, "bills": 3331}, {"ym": "2025-06", "qty": 3404.0, "sales": 107061.84, "bills": 2813}, {"ym": "2025-07", "qty": 3356.0, "sales": 102813.44, "bills": 2844}, {"ym": "2025-08", "qty": 3067.0, "sales": 93884.25, "bills": 2596}, {"ym": "2025-09", "qty": 2771.0, "sales": 79808.3, "bills": 2390}, {"ym": "2025-10", "qty": 2394.0, "sales": 72207.29, "bills": 2026}, {"ym": "2025-11", "qty": 3574.0, "sales": 102521.79, "bills": 2871}, {"ym": "2025-12", "qty": 4382.0, "sales": 119448.8, "bills": 3481}, {"ym": "2026-01", "qty": 3509.0, "sales": 92896.99, "bills": 2778}, {"ym": "2026-02", "qty": 3103.0, "sales": 77990.73, "bills": 2365}, {"ym": "2026-03", "qty": 6864.0, "sales": 179740.43, "bills": 5280}, {"ym": "2026-04", "qty": 9254.0, "sales": 258076.94, "bills": 7618}, {"ym": "2026-05", "qty": 10214.0, "sales": 298732.2, "bills": 8528}, {"ym": "2026-06", "qty": 11500.0, "sales": 344888.31, "bills": 9606}, {"ym": "2026-07", "qty": 5926.0, "sales": 186828.14, "bills": 5101}], "products": [{"iprod": "0203800000379", "idesc": "น้ำมันเขียวผสมพญายอ(ตรารุ่งเรืองชัย)", "qty_jul": 148.0, "sales_jul": 11092.13, "qty_ytd": 809.0, "sales_ytd": 60508.51, "onhand": 2753.0, "unit_cost": 18.54, "cover_months": 64.7}, {"iprod": "0203800000380", "idesc": "น้ำมันนวดสมุนไพรสูตร2(ตรารุ่งเรืองชัย)", "qty_jul": 48.0, "sales_jul": 3596.02, "qty_ytd": 248.0, "sales_ytd": 18564.75, "onhand": 3303.0, "unit_cost": 18.54, "cover_months": 253.1}, {"iprod": "0203800000381", "idesc": "พิมเสนน้ำสำลี(ตรารุ่งเรืองชัย)", "qty_jul": 175.0, "sales_jul": 2590.7, "qty_ytd": 1367.0, "sales_ytd": 20447.58, "onhand": 2766.0, "unit_cost": 7.21, "cover_months": 38.4}, {"iprod": "0203800000395", "idesc": "ยาหม่อง200g.(ตรารุ่งเรืองชัย)", "qty_jul": 39.0, "sales_jul": 5650.77, "qty_ytd": 72.0, "sales_ytd": 10399.52, "onhand": 3220.0, "unit_cost": 57.68, "cover_months": 849.7}, {"iprod": "0203800000396", "idesc": "ยาหม่อง5g.(ตรารุ่งเรืองชัย)", "qty_jul": 127.0, "sales_jul": 1898.29, "qty_ytd": 467.0, "sales_ytd": 6977.27, "onhand": 2926.0, "unit_cost": 7.21, "cover_months": 119.0}, {"iprod": "0203800001302", "idesc": "ยาหม่องโอสถคละสี(มหาจักร)", "qty_jul": 10.0, "sales_jul": 200.0, "qty_ytd": 127.0, "sales_ytd": 2537.62, "onhand": 3054.0, "unit_cost": 13.5, "cover_months": 456.9}, {"iprod": "0903300001", "idesc": "ยาดมสมุนไพรไทย10g.ตราหงส์ไทย", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 41.0, "sales_ytd": 1839.3, "onhand": 165.0, "unit_cost": 31.0, "cover_months": 76.5}, {"iprod": "0903300002", "idesc": "ยาดมสมุนไพรไทย25g.ตราหงส์ไทย", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 0.0, "sales_ytd": 0.0, "onhand": 12.0, "unit_cost": 31.67, "cover_months": null}, {"iprod": "0903300008", "idesc": "ยาหม่องว่านหางจระเข้", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 0.0, "sales_ytd": 0.0, "onhand": 0.0, "unit_cost": 16.0, "cover_months": null}, {"iprod": "0903300010", "idesc": "ยาหม่องขาว45g.ตราละอองไพร", "qty_jul": 275.0, "sales_jul": 8164.61, "qty_ytd": 11263.0, "sales_ytd": 336476.17, "onhand": 4012.0, "unit_cost": 16.0, "cover_months": 6.8}, {"iprod": "0903300011", "idesc": "ยาหม่องเขียว45g.ตราละอองไพร", "qty_jul": 271.0, "sales_jul": 8118.06, "qty_ytd": 12293.0, "sales_ytd": 367470.01, "onhand": 2219.0, "unit_cost": 16.0, "cover_months": 3.4}, {"iprod": "0903300012", "idesc": "ยาหม่องเหลือง45g.ตราละอองไพร", "qty_jul": 251.0, "sales_jul": 7519.37, "qty_ytd": 10985.0, "sales_ytd": 328290.12, "onhand": 4018.0, "unit_cost": 16.0, "cover_months": 6.9}, {"iprod": "0903300013", "idesc": "ยาดมสมุนไพรไทยขวดแก้ว1*12", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 9.0, "sales_ytd": 1485.0, "onhand": 6.0, "unit_cost": 130.0, "cover_months": 12.7}, {"iprod": "0903300014", "idesc": "พิมเสนน้ำลูกกลิ้งเพชร1*12", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 15.0, "sales_ytd": 2467.09, "onhand": 73.0, "unit_cost": 130.0, "cover_months": 92.5}, {"iprod": "0903300015", "idesc": "พิมเสนน้ำลูกกลิ้งฟ้ากุหลาบ", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 29.0, "sales_ytd": 4028.64, "onhand": 80.0, "unit_cost": 110.0, "cover_months": 52.4}, {"iprod": "18857128671273", "idesc": "ยาดมสมุนไพร2g.7วัน7สี(หนุมาน)", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 56.0, "sales_ytd": 6630.16, "onhand": 81.0, "unit_cost": 82.0, "cover_months": 27.5}, {"iprod": "8851447010006", "idesc": "ยาดมตราโป๊ยเซียน", "qty_jul": 1169.0, "sales_jul": 25591.51, "qty_ytd": 8887.0, "sales_ytd": 193932.15, "onhand": 5489.0, "unit_cost": 15.5, "cover_months": 11.7}, {"iprod": "8851447430002", "idesc": "พิมเสนสำลีตราโป๊ยเซียน", "qty_jul": 87.0, "sales_jul": 2602.73, "qty_ytd": 296.0, "sales_ytd": 8791.7, "onhand": 4713.0, "unit_cost": 17.12, "cover_months": 302.5}, {"iprod": "8851447430040", "idesc": "พิมเสนโรลออน5cc.ตราโป๊ยเซียน", "qty_jul": 89.0, "sales_jul": 3552.14, "qty_ytd": 235.0, "sales_ytd": 9357.17, "onhand": 4739.0, "unit_cost": 23.73, "cover_months": 383.2}, {"iprod": "8851447430088", "idesc": "พิมเสนแก้วแบน3cc.ตราโป๊ยเซียน", "qty_jul": 213.0, "sales_jul": 4238.39, "qty_ytd": 655.0, "sales_ytd": 13005.74, "onhand": 4452.0, "unit_cost": 14.01, "cover_months": 129.1}, {"iprod": "8851473006233", "idesc": "ยาแก้ปวดซาร่าเม็ด", "qty_jul": 295.0, "sales_jul": 3461.82, "qty_ytd": 3360.0, "sales_ytd": 38992.58, "onhand": 2871.0, "unit_cost": 9.33, "cover_months": 16.2}, {"iprod": "8851990201036", "idesc": "ยาหม่องตราเสือเอชอาร์สีขาว30g.", "qty_jul": 2.0, "sales_jul": 200.0, "qty_ytd": 27.0, "sales_ytd": 2700.0, "onhand": 105.0, "unit_cost": 80.0, "cover_months": 73.9}, {"iprod": "8851990201098", "idesc": "ยาหม่องตราเสือแดง30g.", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 26.0, "sales_ytd": 2600.0, "onhand": 94.0, "unit_cost": 80.0, "cover_months": 68.7}, {"iprod": "8851990210298", "idesc": "ยาหม่องตราเสือเอชอาร์19.4g.", "qty_jul": 10.0, "sales_jul": 849.86, "qty_ytd": 13.0, "sales_ytd": 1104.86, "onhand": 215.0, "unit_cost": 70.0, "cover_months": 314.2}, {"iprod": "8851990403027", "idesc": "พลาสเตอร์บรรเทาปวดตราเสือสูตรร้อนสีแดง", "qty_jul": 5.0, "sales_jul": 310.0, "qty_ytd": 38.0, "sales_ytd": 2344.73, "onhand": 466.0, "unit_cost": 50.0, "cover_months": 233.0}, {"iprod": "8851990406028", "idesc": "พลาสเตอร์บรรเทาปวดตราเสือสูตรเย็นสีเขียว", "qty_jul": 5.0, "sales_jul": 308.56, "qty_ytd": 28.0, "sales_ytd": 1730.88, "onhand": 476.0, "unit_cost": 50.0, "cover_months": 323.0}, {"iprod": "8854609002178", "idesc": "ยาหม่องเขียวตรายุง13g.(ยันฮี)", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 15.0, "sales_ytd": 525.0, "onhand": 8.0, "unit_cost": 22.0, "cover_months": 10.1}, {"iprod": "8856570290011", "idesc": "ยาน้ำมันเหลืองสูตรไพลตราแม่กุหลาบ20cc.", "qty_jul": 213.0, "sales_jul": 20373.41, "qty_ytd": 1558.0, "sales_ytd": 151243.02, "onhand": 5720.0, "unit_cost": 74.68, "cover_months": 69.8}, {"iprod": "885670150018", "idesc": "ยาหอมเทพจิตรตราห้าม้าชนิดเม็ด(เล็ก)", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 2.0, "sales_ytd": 50.0, "onhand": 5039.0, "unit_cost": 18.34, "cover_months": 47870.5}, {"iprod": "8857102910681", "idesc": "ยาหม่องสำเภาทองสูตรดั้งเดิม50g.", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 24.0, "sales_ytd": 837.11, "onhand": 30.0, "unit_cost": 18.5, "cover_months": 23.8}, {"iprod": "8857102910704", "idesc": "ยาหม่องสมุนไพรบาล์มพริก50g.(กรีนเฮร์บ)", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 39.0, "sales_ytd": 1748.68, "onhand": 6.0, "unit_cost": 27.5, "cover_months": 2.9}, {"iprod": "8857102910711", "idesc": "ยาดมสมุนไพร(หงส์คู่)", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 5.0, "sales_ytd": 148.26, "onhand": 7.0, "unit_cost": 18.0, "cover_months": 26.6}, {"iprod": "8857102910841", "idesc": "ยาหม่องน้ำสมุนไพรรากโสม(กรีนเฮิร์บ)", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 79.0, "sales_ytd": 4254.54, "onhand": 25.0, "unit_cost": 34.0, "cover_months": 6.0}, {"iprod": "8857124862036", "idesc": "น้ำมันนวด50ml.(GoldenHorse)", "qty_jul": 8.0, "sales_jul": 1825.09, "qty_ytd": 72.0, "sales_ytd": 16511.05, "onhand": 3243.0, "unit_cost": 154.5, "cover_months": 855.8}, {"iprod": "8857124862043", "idesc": "กรีนบาล์ม50g.(กรีนเซเว่น)", "qty_jul": 59.0, "sales_jul": 4049.12, "qty_ytd": 585.0, "sales_ytd": 40225.85, "onhand": 3221.0, "unit_cost": 43.5, "cover_months": 104.6}, {"iprod": "8857124862067", "idesc": "บาล์มตะไคร้หอมไล่ยุง50g.(กรีนเซเว่น)", "qty_jul": 65.0, "sales_jul": 4456.8, "qty_ytd": 660.0, "sales_ytd": 45474.82, "onhand": 2744.0, "unit_cost": 43.5, "cover_months": 79.0}, {"iprod": "8857124862104", "idesc": "บาล์มกลิ่นลาเวนเดอร์50g.(กรีนเซเว่น)", "qty_jul": 29.0, "sales_jul": 1996.16, "qty_ytd": 251.0, "sales_ytd": 17280.54, "onhand": 2805.0, "unit_cost": 43.5, "cover_months": 212.3}, {"iprod": "8857124862128", "idesc": "น้ำมันนวด50ml.(วังพญางู)", "qty_jul": 7.0, "sales_jul": 1605.52, "qty_ytd": 72.0, "sales_ytd": 16488.38, "onhand": 3166.0, "unit_cost": 154.5, "cover_months": 835.5}, {"iprod": "8857124862265", "idesc": "บาล์มสมุนไพร50g.สีขาว/ดำ(วังพญางู)", "qty_jul": 15.0, "sales_jul": 1035.0, "qty_ytd": 299.0, "sales_ytd": 20587.74, "onhand": 2893.0, "unit_cost": 46.5, "cover_months": 183.8}, {"iprod": "8857124862722", "idesc": "บาล์มสมุนไพร50g.สีเขียว/ชมพู(บัวทอง)", "qty_jul": 17.0, "sales_jul": 765.0, "qty_ytd": 253.0, "sales_ytd": 11289.89, "onhand": 2565.0, "unit_cost": 29.0, "cover_months": 192.6}, {"iprod": "8857126235210", "idesc": "ยาหม่องเหลือง50g.ตราดอกบัวสี", "qty_jul": 171.0, "sales_jul": 5097.63, "qty_ytd": 306.0, "sales_ytd": 9115.21, "onhand": 6213.0, "unit_cost": 16.67, "cover_months": 385.8}, {"iprod": "8857126235227", "idesc": "ยาหม่องเขียว50g.ตราดอกบัวสี", "qty_jul": 345.0, "sales_jul": 10285.69, "qty_ytd": 643.0, "sales_ytd": 19140.74, "onhand": 5765.0, "unit_cost": 16.67, "cover_months": 170.3}, {"iprod": "8857126235234", "idesc": "ยาหม่องขาว50g.ตราดอกบัวสี", "qty_jul": 86.0, "sales_jul": 2573.0, "qty_ytd": 170.0, "sales_ytd": 5036.24, "onhand": 4536.0, "unit_cost": 16.67, "cover_months": 507.0}, {"iprod": "8857128671009", "idesc": "ยาดมสมุนไพร2g.(หนุมาน)", "qty_jul": 753.0, "sales_jul": 11259.91, "qty_ytd": 14267.0, "sales_ytd": 213060.21, "onhand": 3102.0, "unit_cost": 8.0, "cover_months": 4.1}, {"iprod": "8857128671429", "idesc": "ยาดมสมุนไพร5g.+จุกยาดม(หนุมาน)", "qty_jul": 5.0, "sales_jul": 275.0, "qty_ytd": 892.0, "sales_ytd": 48476.24, "onhand": 276.0, "unit_cost": 34.0, "cover_months": 5.9}, {"iprod": "8857129045090", "idesc": "ยาดมบูสเตอร์กลิ่นยูคาลิปตัสตราแทนใจ5g.", "qty_jul": 305.0, "sales_jul": 11798.42, "qty_ytd": 386.0, "sales_ytd": 14865.39, "onhand": 885.0, "unit_cost": 27.9, "cover_months": 43.6}, {"iprod": "8857200535366", "idesc": "ยาดมสมุนไพร5g.ตราหนุมาน", "qty_jul": 440.0, "sales_jul": 13161.93, "qty_ytd": 9817.0, "sales_ytd": 292837.49, "onhand": 6771.0, "unit_cost": 17.5, "cover_months": 13.1}, {"iprod": "8858111000349", "idesc": "น้ำมันเขียวผสมเสลดพังพอน20cc.สูตรเย็น(ตราสมุนไพรวังพรม)", "qty_jul": 15.0, "sales_jul": 1312.57, "qty_ytd": 149.0, "sales_ytd": 13200.2, "onhand": 282.0, "unit_cost": 56.65, "cover_months": 36.0}, {"iprod": "8858111002381", "idesc": "พิมเสนน้ำ5cc.(ตราสมุนไพรวังพรม)", "qty_jul": 19.0, "sales_jul": 566.84, "qty_ytd": 181.0, "sales_ytd": 5410.33, "onhand": 178.0, "unit_cost": 18.89, "cover_months": 18.7}, {"iprod": "8858886388017", "idesc": "น้ำมันนวดโอสถคละสี(มหาจักร)", "qty_jul": 72.0, "sales_jul": 1794.35, "qty_ytd": 628.0, "sales_ytd": 15637.97, "onhand": 2746.0, "unit_cost": 12.5, "cover_months": 83.1}, {"iprod": "8859123541257", "idesc": "ยาหม่องอโยธยา", "qty_jul": 1.0, "sales_jul": 15.0, "qty_ytd": 215.0, "sales_ytd": 3261.72, "onhand": 390.0, "unit_cost": 8.0, "cover_months": 34.5}, {"iprod": "886051009989", "idesc": "ยาหม่องเหลือง50g.ตราเอกปฐม", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 0.0, "sales_ytd": 0.0, "onhand": 24.0, "unit_cost": 19.59, "cover_months": null}, {"iprod": "9551106190", "idesc": "ยาหอม", "qty_jul": 82.0, "sales_jul": 2636.73, "qty_ytd": 6202.0, "sales_ytd": 185168.65, "onhand": 2743.0, "unit_cost": 21.0, "cover_months": 8.4}], "branches": [{"code": "086", "name": "คลองเขม้า", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 122.0, "sales_jul": 3312.89, "qty_ytd": 2221.0, "sales_ytd": 62440.85, "bills_ytd": 1761}, {"code": "009", "name": "เกาะลันตา", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 75.0, "sales_jul": 2759.02, "qty_ytd": 1815.0, "sales_ytd": 57872.94, "bills_ytd": 1068}, {"code": "085", "name": "เกาะลันตา 2", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 59.0, "sales_jul": 1281.82, "qty_ytd": 1979.0, "sales_ytd": 53141.15, "bills_ytd": 1024}, {"code": "108", "name": "สมุย2(แม่น้ำ)", "dm": "มณฑา กู้เกียรติเดชสกุล", "dm_code": "1287", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 85.0, "sales_jul": 3701.68, "qty_ytd": 1312.0, "sales_ytd": 46417.36, "bills_ytd": 783}, {"code": "031", "name": "บ้านนาเดิม", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 84.0, "sales_jul": 3200.71, "qty_ytd": 1440.0, "sales_ytd": 44709.4, "bills_ytd": 1215}, {"code": "027", "name": "ทับใหม่", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 73.0, "sales_jul": 2133.93, "qty_ytd": 1308.0, "sales_ytd": 34640.84, "bills_ytd": 1207}, {"code": "235", "name": "เกาะลันตา3 (กบ-18)", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 41.0, "sales_jul": 1229.49, "qty_ytd": 1324.0, "sales_ytd": 34164.49, "bills_ytd": 701}, {"code": "106", "name": "สมุย1(ตลาดสีฟ้า)", "dm": "มณฑา กู้เกียรติเดชสกุล", "dm_code": "1287", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 83.0, "sales_jul": 2904.11, "qty_ytd": 817.0, "sales_ytd": 28865.14, "bills_ytd": 606}, {"code": "208", "name": "หัวถนนสมุย (สฎ-41)", "dm": "มณฑา กู้เกียรติเดชสกุล", "dm_code": "1287", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 71.0, "sales_jul": 2410.11, "qty_ytd": 925.0, "sales_ytd": 27379.18, "bills_ytd": 740}, {"code": "196", "name": "บางรักษ์สมุย (สฏ-40)", "dm": "มณฑา กู้เกียรติเดชสกุล", "dm_code": "1287", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 86.0, "sales_jul": 3218.29, "qty_ytd": 895.0, "sales_ytd": 27374.33, "bills_ytd": 597}, {"code": "147", "name": "ในยาง", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 54.0, "sales_jul": 1633.6, "qty_ytd": 915.0, "sales_ytd": 26571.33, "bills_ytd": 622}, {"code": "126", "name": "สมุย3 ละไม", "dm": "มณฑา กู้เกียรติเดชสกุล", "dm_code": "1287", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 43.0, "sales_jul": 1612.69, "qty_ytd": 876.0, "sales_ytd": 26366.13, "bills_ytd": 674}, {"code": "045", "name": "อำเภอเมืองกระบี่", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 31.0, "sales_jul": 1034.0, "qty_ytd": 882.0, "sales_ytd": 26340.62, "bills_ytd": 701}, {"code": "029", "name": "ควนสามัคคี", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 60.0, "sales_jul": 1698.49, "qty_ytd": 933.0, "sales_ytd": 25828.43, "bills_ytd": 777}, {"code": "077", "name": "หนองทะเล", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 58.0, "sales_jul": 1639.46, "qty_ytd": 937.0, "sales_ytd": 25817.11, "bills_ytd": 806}, {"code": "171", "name": "คึกคัก", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 65.0, "sales_jul": 2061.0, "qty_ytd": 857.0, "sales_ytd": 25806.65, "bills_ytd": 572}, {"code": "069", "name": "นาบอน", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 53.0, "sales_jul": 1567.39, "qty_ytd": 869.0, "sales_ytd": 25333.3, "bills_ytd": 741}, {"code": "068", "name": "เหนือคลอง", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 83.0, "sales_jul": 2666.46, "qty_ytd": 832.0, "sales_ytd": 24677.0, "bills_ytd": 682}, {"code": "006", "name": "ชัยบุรี", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 63.0, "sales_jul": 2069.18, "qty_ytd": 857.0, "sales_ytd": 24104.08, "bills_ytd": 774}, {"code": "080", "name": "คลองสงค์", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 31.0, "sales_jul": 839.23, "qty_ytd": 895.0, "sales_ytd": 23846.62, "bills_ytd": 786}, {"code": "154", "name": "วังตะกอ", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 118.0, "sales_jul": 3715.72, "qty_ytd": 753.0, "sales_ytd": 22856.78, "bills_ytd": 651}, {"code": "013", "name": "คลองท่อม", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 41.0, "sales_jul": 1254.49, "qty_ytd": 801.0, "sales_ytd": 22611.47, "bills_ytd": 672}, {"code": "075", "name": "เขาทะลุ", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 64.0, "sales_jul": 2195.44, "qty_ytd": 784.0, "sales_ytd": 22041.34, "bills_ytd": 640}, {"code": "131", "name": "สมุย 4 ลิปะใหญ่", "dm": "มณฑา กู้เกียรติเดชสกุล", "dm_code": "1287", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 82.0, "sales_jul": 2707.87, "qty_ytd": 763.0, "sales_ytd": 21960.8, "bills_ytd": 510}, {"code": "061", "name": "ทรายขาว", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 28.0, "sales_jul": 933.86, "qty_ytd": 757.0, "sales_ytd": 21846.3, "bills_ytd": 657}, {"code": "103", "name": "หนองขรี", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 98.0, "sales_jul": 3058.93, "qty_ytd": 745.0, "sales_ytd": 21069.19, "bills_ytd": 623}, {"code": "037", "name": "ขนอม", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 43.0, "sales_jul": 1311.33, "qty_ytd": 611.0, "sales_ytd": 20830.64, "bills_ytd": 457}, {"code": "014", "name": "เคียนซา", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 41.0, "sales_jul": 1650.51, "qty_ytd": 626.0, "sales_ytd": 20398.45, "bills_ytd": 510}, {"code": "197", "name": "อ่าวนาง (กบ-18)", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 49.0, "sales_jul": 1366.42, "qty_ytd": 729.0, "sales_ytd": 20124.24, "bills_ytd": 569}, {"code": "032", "name": "คลองพน", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 25.0, "sales_jul": 751.0, "qty_ytd": 667.0, "sales_ytd": 20012.99, "bills_ytd": 587}, {"code": "020", "name": "หนองนิล", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 43.0, "sales_jul": 1656.86, "qty_ytd": 760.0, "sales_ytd": 19912.92, "bills_ytd": 685}, {"code": "121", "name": "ราไวย์", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 23.0, "sales_jul": 615.99, "qty_ytd": 645.0, "sales_ytd": 19257.84, "bills_ytd": 311}, {"code": "066", "name": "ทับละมุ", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 51.0, "sales_jul": 1685.78, "qty_ytd": 688.0, "sales_ytd": 19060.12, "bills_ytd": 520}, {"code": "195", "name": "หัวหิน102(ปข-8)", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 27.0, "sales_jul": 631.34, "qty_ytd": 679.0, "sales_ytd": 19050.56, "bills_ytd": 459}, {"code": "064", "name": "ท้ายเหมือง", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 40.0, "sales_jul": 1212.67, "qty_ytd": 657.0, "sales_ytd": 19023.6, "bills_ytd": 533}, {"code": "022", "name": "บางสวรรค์", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 42.0, "sales_jul": 1291.0, "qty_ytd": 628.0, "sales_ytd": 18853.74, "bills_ytd": 545}, {"code": "016", "name": "โคกกลอย", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 27.0, "sales_jul": 747.97, "qty_ytd": 669.0, "sales_ytd": 18799.77, "bills_ytd": 551}, {"code": "117", "name": "โมถ่าย", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 47.0, "sales_jul": 1776.6, "qty_ytd": 605.0, "sales_ytd": 18310.38, "bills_ytd": 543}, {"code": "057", "name": "ห้วยยอด", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 38.0, "sales_jul": 881.88, "qty_ytd": 655.0, "sales_ytd": 18270.73, "bills_ytd": 583}, {"code": "107", "name": "ตะกั่วป่า", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 39.0, "sales_jul": 1365.7, "qty_ytd": 627.0, "sales_ytd": 17804.47, "bills_ytd": 507}, {"code": "023", "name": "พังงา", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 38.0, "sales_jul": 1150.33, "qty_ytd": 622.0, "sales_ytd": 17450.01, "bills_ytd": 533}, {"code": "183", "name": "คลองแห้ง", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 19.0, "sales_jul": 565.97, "qty_ytd": 589.0, "sales_ytd": 17437.65, "bills_ytd": 379}, {"code": "073", "name": "วิภาวดี", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 45.0, "sales_jul": 1204.79, "qty_ytd": 604.0, "sales_ytd": 17294.31, "bills_ytd": 460}, {"code": "130", "name": "บางสวรรค์2", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 58.0, "sales_jul": 2336.74, "qty_ytd": 588.0, "sales_ytd": 17062.89, "bills_ytd": 544}, {"code": "053", "name": "ต้นโพธิ์", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 31.0, "sales_jul": 865.78, "qty_ytd": 595.0, "sales_ytd": 16979.33, "bills_ytd": 492}, {"code": "157", "name": "กรุงชิง", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 26.0, "sales_jul": 986.03, "qty_ytd": 608.0, "sales_ytd": 16851.8, "bills_ytd": 550}, {"code": "123", "name": "บางสะพาน", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 39.0, "sales_jul": 1118.47, "qty_ytd": 554.0, "sales_ytd": 16825.46, "bills_ytd": 475}, {"code": "039", "name": "สิชล", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 23.0, "sales_jul": 856.57, "qty_ytd": 579.0, "sales_ytd": 16804.34, "bills_ytd": 487}, {"code": "132", "name": "บ้านใน", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 45.0, "sales_jul": 1187.27, "qty_ytd": 596.0, "sales_ytd": 16535.21, "bills_ytd": 525}, {"code": "129", "name": "ท่าฉาง", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 28.0, "sales_jul": 751.33, "qty_ytd": 572.0, "sales_ytd": 16386.38, "bills_ytd": 498}, {"code": "046", "name": "ทุ่งเตา", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 62.0, "sales_jul": 2323.01, "qty_ytd": 543.0, "sales_ytd": 16367.75, "bills_ytd": 495}, {"code": "021", "name": "พิปูน", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 21.0, "sales_jul": 590.1, "qty_ytd": 557.0, "sales_ytd": 16142.35, "bills_ytd": 457}, {"code": "034", "name": "สิเกา", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 33.0, "sales_jul": 1045.0, "qty_ytd": 549.0, "sales_ytd": 15752.78, "bills_ytd": 474}, {"code": "054", "name": "ท่าชนะ", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 23.0, "sales_jul": 556.0, "qty_ytd": 570.0, "sales_ytd": 15585.74, "bills_ytd": 477}, {"code": "036", "name": "ชะอวด", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 17.0, "sales_jul": 468.0, "qty_ytd": 506.0, "sales_ytd": 15337.85, "bills_ytd": 447}, {"code": "074", "name": "จันดี", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 24.0, "sales_jul": 868.05, "qty_ytd": 526.0, "sales_ytd": 15013.9, "bills_ytd": 465}, {"code": "153", "name": "อ่าวลึกใต้", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 6.0, "sales_jul": 261.9, "qty_ytd": 467.0, "sales_ytd": 14982.77, "bills_ytd": 334}, {"code": "047", "name": "พรุดินนา", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 16.0, "sales_jul": 548.0, "qty_ytd": 474.0, "sales_ytd": 14929.55, "bills_ytd": 405}, {"code": "051", "name": "คลองยาง", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 36.0, "sales_jul": 1048.9, "qty_ytd": 521.0, "sales_ytd": 14859.56, "bills_ytd": 453}, {"code": "144", "name": "ทุ่งตะโก", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 44.0, "sales_jul": 1752.0, "qty_ytd": 493.0, "sales_ytd": 14761.96, "bills_ytd": 363}, {"code": "030", "name": "ทุ่งใหญ่", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 61.0, "sales_jul": 1640.16, "qty_ytd": 492.0, "sales_ytd": 14613.91, "bills_ytd": 422}, {"code": "160", "name": "ปากน้ำหลังสวน", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 31.0, "sales_jul": 892.0, "qty_ytd": 499.0, "sales_ytd": 14483.48, "bills_ytd": 419}, {"code": "083", "name": "หนองดี", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 25.0, "sales_jul": 1119.99, "qty_ytd": 473.0, "sales_ytd": 14473.05, "bills_ytd": 432}, {"code": "059", "name": "ลานสกา", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 36.0, "sales_jul": 995.97, "qty_ytd": 464.0, "sales_ytd": 14464.09, "bills_ytd": 432}, {"code": "168", "name": "วัดโคก", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 35.0, "sales_jul": 1028.48, "qty_ytd": 472.0, "sales_ytd": 14385.41, "bills_ytd": 434}, {"code": "026", "name": "เขาพนม", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 29.0, "sales_jul": 1142.77, "qty_ytd": 486.0, "sales_ytd": 14317.98, "bills_ytd": 421}, {"code": "232", "name": "สนามบินสมุย (สฎ-44)", "dm": "มณฑา กู้เกียรติเดชสกุล", "dm_code": "1287", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 53.0, "sales_jul": 1844.43, "qty_ytd": 454.0, "sales_ytd": 14217.65, "bills_ytd": 383}, {"code": "049", "name": "ลำทับใหม่", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 25.0, "sales_jul": 823.0, "qty_ytd": 508.0, "sales_ytd": 14120.19, "bills_ytd": 426}, {"code": "001", "name": "บ้านส้อง", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 39.0, "sales_jul": 1668.0, "qty_ytd": 496.0, "sales_ytd": 14001.15, "bills_ytd": 417}, {"code": "204", "name": "ทุ่งสง (นศ-33)", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 40.0, "sales_jul": 1569.99, "qty_ytd": 461.0, "sales_ytd": 13974.53, "bills_ytd": 433}, {"code": "113", "name": "ขนอม2", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 12.0, "sales_jul": 438.0, "qty_ytd": 495.0, "sales_ytd": 13886.54, "bills_ytd": 411}, {"code": "199", "name": "บ้านกลาย (นศ-32)", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 52.0, "sales_jul": 1708.62, "qty_ytd": 464.0, "sales_ytd": 13857.8, "bills_ytd": 418}, {"code": "071", "name": "เขาวิเศษ", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 33.0, "sales_jul": 1111.0, "qty_ytd": 436.0, "sales_ytd": 13701.07, "bills_ytd": 391}, {"code": "101", "name": "ท่าศาลา", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 46.0, "sales_jul": 1447.33, "qty_ytd": 452.0, "sales_ytd": 13499.46, "bills_ytd": 416}, {"code": "165", "name": "มะนัง", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 24.0, "sales_jul": 737.0, "qty_ytd": 406.0, "sales_ytd": 13368.37, "bills_ytd": 371}, {"code": "060", "name": "ท่าชี", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 42.0, "sales_jul": 1175.99, "qty_ytd": 431.0, "sales_ytd": 13311.5, "bills_ytd": 409}, {"code": "063", "name": "กงตาก", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 25.0, "sales_jul": 648.58, "qty_ytd": 456.0, "sales_ytd": 13125.55, "bills_ytd": 418}, {"code": "179", "name": "ที่วัง", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 26.0, "sales_jul": 735.64, "qty_ytd": 528.0, "sales_ytd": 13106.4, "bills_ytd": 456}, {"code": "128", "name": "นาเมืองเพชร", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 32.0, "sales_jul": 990.14, "qty_ytd": 458.0, "sales_ytd": 13096.48, "bills_ytd": 398}, {"code": "038", "name": "ควนขนุน", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 25.0, "sales_jul": 707.0, "qty_ytd": 431.0, "sales_ytd": 13060.19, "bills_ytd": 389}, {"code": "040", "name": "ทำเนียบ", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 27.0, "sales_jul": 618.0, "qty_ytd": 407.0, "sales_ytd": 12905.78, "bills_ytd": 351}, {"code": "167", "name": "หน้าทับ", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 31.0, "sales_jul": 1047.49, "qty_ytd": 501.0, "sales_ytd": 12768.63, "bills_ytd": 474}, {"code": "231", "name": "บ้านพอน (ภก-6)", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 33.0, "sales_jul": 821.88, "qty_ytd": 461.0, "sales_ytd": 12733.59, "bills_ytd": 390}, {"code": "141", "name": "ควนนิยม", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 43.0, "sales_jul": 1273.49, "qty_ytd": 461.0, "sales_ytd": 12709.32, "bills_ytd": 422}, {"code": "058", "name": "พรหมคีรี", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 59.0, "sales_jul": 1605.06, "qty_ytd": 486.0, "sales_ytd": 12555.73, "bills_ytd": 445}, {"code": "114", "name": "ระโนด", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 12.0, "sales_jul": 285.0, "qty_ytd": 386.0, "sales_ytd": 12551.13, "bills_ytd": 329}, {"code": "233", "name": "บ้านหิน (นศ-37)", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 49.0, "sales_jul": 1420.73, "qty_ytd": 431.0, "sales_ytd": 12310.3, "bills_ytd": 398}, {"code": "090", "name": "ต้นเหรียง", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 26.0, "sales_jul": 834.01, "qty_ytd": 525.0, "sales_ytd": 12304.96, "bills_ytd": 492}, {"code": "078", "name": "กะปาง", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 26.0, "sales_jul": 542.28, "qty_ytd": 447.0, "sales_ytd": 12276.62, "bills_ytd": 395}, {"code": "025", "name": "วค.สุราษฏร์", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 26.0, "sales_jul": 643.64, "qty_ytd": 448.0, "sales_ytd": 12241.15, "bills_ytd": 408}, {"code": "140", "name": "ดอนสัก", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 45.0, "sales_jul": 1390.42, "qty_ytd": 409.0, "sales_ytd": 12062.06, "bills_ytd": 365}, {"code": "135", "name": "หลังสวน", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 44.0, "sales_jul": 1690.74, "qty_ytd": 414.0, "sales_ytd": 12014.16, "bills_ytd": 376}, {"code": "120", "name": "ปากน้ำปราณ", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 11.0, "sales_jul": 330.0, "qty_ytd": 400.0, "sales_ytd": 11649.83, "bills_ytd": 337}, {"code": "172", "name": "ท่าสะอ้าน", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 8.0, "sales_jul": 283.32, "qty_ytd": 382.0, "sales_ytd": 11536.57, "bills_ytd": 292}, {"code": "176", "name": "กองบิน 56", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 11.0, "sales_jul": 705.09, "qty_ytd": 359.0, "sales_ytd": 11490.46, "bills_ytd": 296}, {"code": "002", "name": "พระแสง", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 27.0, "sales_jul": 945.0, "qty_ytd": 374.0, "sales_ytd": 11370.42, "bills_ytd": 322}, {"code": "193", "name": "นาสาร(สฏ-39)", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 59.0, "sales_jul": 2026.0, "qty_ytd": 386.0, "sales_ytd": 11345.73, "bills_ytd": 352}, {"code": "065", "name": "นบพิตำ", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 25.0, "sales_jul": 578.97, "qty_ytd": 394.0, "sales_ytd": 11136.29, "bills_ytd": 354}, {"code": "169", "name": "บางแพ", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 34.0, "sales_jul": 867.54, "qty_ytd": 456.0, "sales_ytd": 10893.8, "bills_ytd": 384}, {"code": "149", "name": "เกาะสิเหร่", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 16.0, "sales_jul": 593.91, "qty_ytd": 384.0, "sales_ytd": 10722.77, "bills_ytd": 320}, {"code": "122", "name": "บางสะพานน้อย", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 25.0, "sales_jul": 642.57, "qty_ytd": 351.0, "sales_ytd": 10632.39, "bills_ytd": 229}, {"code": "084", "name": "ถ้ำพรรณรา", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 36.0, "sales_jul": 1107.12, "qty_ytd": 378.0, "sales_ytd": 10620.42, "bills_ytd": 329}, {"code": "048", "name": "ฉวาง", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 19.0, "sales_jul": 706.0, "qty_ytd": 357.0, "sales_ytd": 10607.05, "bills_ytd": 315}, {"code": "050", "name": "ทุ่งยาว", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 24.0, "sales_jul": 921.85, "qty_ytd": 312.0, "sales_ytd": 10581.17, "bills_ytd": 280}, {"code": "116", "name": "สิชล2", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 24.0, "sales_jul": 1080.87, "qty_ytd": 359.0, "sales_ytd": 10570.08, "bills_ytd": 312}, {"code": "151", "name": "คลองมวน", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 19.0, "sales_jul": 419.0, "qty_ytd": 374.0, "sales_ytd": 10539.55, "bills_ytd": 316}, {"code": "145", "name": "สวี", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 53.0, "sales_jul": 1318.75, "qty_ytd": 420.0, "sales_ytd": 10444.6, "bills_ytd": 348}, {"code": "028", "name": "คีรีรัฐนิคม", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 37.0, "sales_jul": 1179.0, "qty_ytd": 344.0, "sales_ytd": 10425.14, "bills_ytd": 308}, {"code": "119", "name": "สิงหนคร", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 9.0, "sales_jul": 600.52, "qty_ytd": 314.0, "sales_ytd": 10320.08, "bills_ytd": 254}, {"code": "112", "name": "สะทิงพระ", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 10.0, "sales_jul": 433.0, "qty_ytd": 298.0, "sales_ytd": 10152.52, "bills_ytd": 245}, {"code": "111", "name": "คุระบุรี", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 26.0, "sales_jul": 731.0, "qty_ytd": 389.0, "sales_ytd": 10126.77, "bills_ytd": 336}, {"code": "042", "name": "โคกบก", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 18.0, "sales_jul": 660.0, "qty_ytd": 313.0, "sales_ytd": 9918.63, "bills_ytd": 281}, {"code": "082", "name": "ไสไทย", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 10.0, "sales_jul": 294.92, "qty_ytd": 335.0, "sales_ytd": 9891.11, "bills_ytd": 268}, {"code": "229", "name": "มอ.สุราษฎร์ (สฎ-43)", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 30.0, "sales_jul": 929.57, "qty_ytd": 359.0, "sales_ytd": 9765.0, "bills_ytd": 333}, {"code": "055", "name": "ไชยา", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 6.0, "sales_jul": 162.0, "qty_ytd": 310.0, "sales_ytd": 9722.23, "bills_ytd": 252}, {"code": "056", "name": "มะนาวหวาน", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 16.0, "sales_jul": 706.99, "qty_ytd": 309.0, "sales_ytd": 9538.91, "bills_ytd": 285}, {"code": "210", "name": "ลัคกี้-ตลาดล่าง (สฎ-001)", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 19.0, "sales_jul": 504.0, "qty_ytd": 384.0, "sales_ytd": 9530.22, "bills_ytd": 354}, {"code": "067", "name": "ปลายพระยา", "dm": "ณัฐกมล พิมเสน", "dm_code": "1352", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 25.0, "sales_jul": 780.85, "qty_ytd": 316.0, "sales_ytd": 9495.08, "bills_ytd": 276}, {"code": "102", "name": "ควนมะพร้าว", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 15.0, "sales_jul": 691.0, "qty_ytd": 281.0, "sales_ytd": 9467.79, "bills_ytd": 250}, {"code": "139", "name": "เขาขาว", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 24.0, "sales_jul": 697.0, "qty_ytd": 342.0, "sales_ytd": 9287.78, "bills_ytd": 271}, {"code": "062", "name": "บ่อล้อ", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 16.0, "sales_jul": 494.0, "qty_ytd": 279.0, "sales_ytd": 9267.07, "bills_ytd": 216}, {"code": "070", "name": "พระแสง2", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 10.0, "sales_jul": 384.0, "qty_ytd": 319.0, "sales_ytd": 9205.98, "bills_ytd": 278}, {"code": "033", "name": "เสวียด", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 24.0, "sales_jul": 687.79, "qty_ytd": 319.0, "sales_ytd": 9086.95, "bills_ytd": 290}, {"code": "133", "name": "ระนอง", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 27.0, "sales_jul": 1008.35, "qty_ytd": 277.0, "sales_ytd": 9017.67, "bills_ytd": 207}, {"code": "076", "name": "บางขัน", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 30.0, "sales_jul": 694.4, "qty_ytd": 331.0, "sales_ytd": 8979.65, "bills_ytd": 295}, {"code": "164", "name": "มิตรภาพระนอง", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 34.0, "sales_jul": 988.0, "qty_ytd": 303.0, "sales_ytd": 8698.54, "bills_ytd": 262}, {"code": "174", "name": "ทุ่งตำเสา", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 16.0, "sales_jul": 446.3, "qty_ytd": 284.0, "sales_ytd": 8611.56, "bills_ytd": 251}, {"code": "142", "name": "ไม้หลา", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 28.0, "sales_jul": 894.0, "qty_ytd": 308.0, "sales_ytd": 8571.87, "bills_ytd": 278}, {"code": "189", "name": "บางโรง", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 21.0, "sales_jul": 515.0, "qty_ytd": 324.0, "sales_ytd": 8315.0, "bills_ytd": 257}, {"code": "182", "name": "นาทวี", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 6.0, "sales_jul": 234.0, "qty_ytd": 308.0, "sales_ytd": 8199.58, "bills_ytd": 270}, {"code": "161", "name": "โกเตง", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 7.0, "sales_jul": 137.0, "qty_ytd": 291.0, "sales_ytd": 8151.8, "bills_ytd": 244}, {"code": "218", "name": "มวกเหล็ก (สบ-2)", "dm": "อุษา ทองมาก", "dm_code": "1189", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 33.0, "sales_jul": 898.0, "qty_ytd": 271.0, "sales_ytd": 8136.81, "bills_ytd": 224}, {"code": "222", "name": "ดอนหว้า (ชพ-13)", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 38.0, "sales_jul": 1049.6, "qty_ytd": 271.0, "sales_ytd": 8084.4, "bills_ytd": 226}, {"code": "225", "name": "ลำโพ (นบ-1)", "dm": "อุษา ทองมาก", "dm_code": "1189", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 27.0, "sales_jul": 800.0, "qty_ytd": 280.0, "sales_ytd": 8055.36, "bills_ytd": 243}, {"code": "118", "name": "มาบอำมฤต", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 21.0, "sales_jul": 627.14, "qty_ytd": 295.0, "sales_ytd": 8018.45, "bills_ytd": 259}, {"code": "192", "name": "ปราณบุรี(ปข-6)", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 12.0, "sales_jul": 191.0, "qty_ytd": 284.0, "sales_ytd": 7969.29, "bills_ytd": 241}, {"code": "136", "name": "ปากพนัง", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 14.0, "sales_jul": 390.8, "qty_ytd": 285.0, "sales_ytd": 7777.96, "bills_ytd": 236}, {"code": "150", "name": "ลำภูรา", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 19.0, "sales_jul": 738.0, "qty_ytd": 260.0, "sales_ytd": 7708.43, "bills_ytd": 223}, {"code": "214", "name": "สี่แยกวัดโหนด (นศ-35)", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 25.0, "sales_jul": 565.82, "qty_ytd": 330.0, "sales_ytd": 7394.02, "bills_ytd": 313}, {"code": "177", "name": "ทุ่งลุง", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 18.0, "sales_jul": 698.12, "qty_ytd": 280.0, "sales_ytd": 7351.16, "bills_ytd": 241}, {"code": "223", "name": "อ่างทอง (ชพ-14)", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 14.0, "sales_jul": 396.8, "qty_ytd": 258.0, "sales_ytd": 7191.27, "bills_ytd": 230}, {"code": "125", "name": "ท่าแซะ", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 12.0, "sales_jul": 310.0, "qty_ytd": 239.0, "sales_ytd": 7168.12, "bills_ytd": 208}, {"code": "087", "name": "ย่านตาขาว", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 16.0, "sales_jul": 553.85, "qty_ytd": 235.0, "sales_ytd": 7158.55, "bills_ytd": 209}, {"code": "017", "name": "เขาปีบ", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 14.0, "sales_jul": 391.0, "qty_ytd": 235.0, "sales_ytd": 6957.71, "bills_ytd": 197}, {"code": "237", "name": "ปะทิว (ชพ-15)", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 44.0, "sales_jul": 1038.6, "qty_ytd": 281.0, "sales_ytd": 6936.03, "bills_ytd": 243}, {"code": "226", "name": "รพ.เกษมราษ (สบ-4)", "dm": "อุษา ทองมาก", "dm_code": "1189", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 9.0, "sales_jul": 238.78, "qty_ytd": 233.0, "sales_ytd": 6864.49, "bills_ytd": 191}, {"code": "166", "name": "ดอนกรวย", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 15.0, "sales_jul": 284.34, "qty_ytd": 241.0, "sales_ytd": 6852.78, "bills_ytd": 209}, {"code": "043", "name": "ป่าพะยอม", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 7.0, "sales_jul": 213.47, "qty_ytd": 236.0, "sales_ytd": 6736.86, "bills_ytd": 217}, {"code": "211", "name": "เกาะหลัก (ปข-9)", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 17.0, "sales_jul": 544.0, "qty_ytd": 251.0, "sales_ytd": 6658.35, "bills_ytd": 225}, {"code": "173", "name": "วัดเพลง", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 19.0, "sales_jul": 538.45, "qty_ytd": 211.0, "sales_ytd": 6636.04, "bills_ytd": 175}, {"code": "228", "name": "ห้วยปริก (นศ-36)", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 23.0, "sales_jul": 660.05, "qty_ytd": 247.0, "sales_ytd": 6630.23, "bills_ytd": 226}, {"code": "219", "name": "เสนา (อย-3)", "dm": "อุษา ทองมาก", "dm_code": "1189", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 6.0, "sales_jul": 203.0, "qty_ytd": 193.0, "sales_ytd": 6622.44, "bills_ytd": 163}, {"code": "152", "name": "บ้านตาขุน", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 7.0, "sales_jul": 243.0, "qty_ytd": 139.0, "sales_ytd": 6489.45, "bills_ytd": 101}, {"code": "191", "name": "ทับสะแก(ปข-5)", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 15.0, "sales_jul": 363.0, "qty_ytd": 210.0, "sales_ytd": 6352.25, "bills_ytd": 185}, {"code": "200", "name": "โคกเมา(สข-12)", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 31.0, "sales_jul": 856.71, "qty_ytd": 209.0, "sales_ytd": 6304.36, "bills_ytd": 194}, {"code": "185", "name": "กุยบุรี", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 16.0, "sales_jul": 510.0, "qty_ytd": 216.0, "sales_ytd": 6293.7, "bills_ytd": 189}, {"code": "079", "name": "แยกปฐมพร", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 19.0, "sales_jul": 604.0, "qty_ytd": 206.0, "sales_ytd": 6233.61, "bills_ytd": 184}, {"code": "110", "name": "ปากพะยูน", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 19.0, "sales_jul": 722.91, "qty_ytd": 194.0, "sales_ytd": 6181.16, "bills_ytd": 175}, {"code": "137", "name": "ตลาดวาสนา", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 21.0, "sales_jul": 911.0, "qty_ytd": 210.0, "sales_ytd": 6136.75, "bills_ytd": 165}, {"code": "198", "name": "ศรีนครินทร์ (พท-10)", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 9.0, "sales_jul": 288.0, "qty_ytd": 212.0, "sales_ytd": 6110.9, "bills_ytd": 189}, {"code": "041", "name": "การุณราษฏร์", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 20.0, "sales_jul": 520.0, "qty_ytd": 230.0, "sales_ytd": 6080.7, "bills_ytd": 196}, {"code": "212", "name": "สมอโพรง (ปข-10)", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 17.0, "sales_jul": 503.97, "qty_ytd": 154.0, "sales_ytd": 6038.44, "bills_ytd": 109}, {"code": "052", "name": "แม่ขรี", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 5.0, "sales_jul": 397.0, "qty_ytd": 183.0, "sales_ytd": 5981.94, "bills_ytd": 164}, {"code": "138", "name": "บ้านกรูดใหม่", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 21.0, "sales_jul": 611.16, "qty_ytd": 218.0, "sales_ytd": 5779.12, "bills_ytd": 176}, {"code": "194", "name": "วัดเทพ (ภก-5)", "dm": "แพรทิพย์ จันทร์ปาน", "dm_code": "1231", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 20.0, "sales_jul": 630.0, "qty_ytd": 250.0, "sales_ytd": 5762.94, "bills_ytd": 186}, {"code": "203", "name": "บ้านคลองเตย (สข-13)", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 19.0, "sales_jul": 549.0, "qty_ytd": 168.0, "sales_ytd": 5744.33, "bills_ytd": 157}, {"code": "209", "name": "ศรีธรรมโศก (นศ-34)", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 20.0, "sales_jul": 451.84, "qty_ytd": 230.0, "sales_ytd": 5725.16, "bills_ytd": 204}, {"code": "170", "name": "ควนเนียง", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 19.0, "sales_jul": 472.3, "qty_ytd": 194.0, "sales_ytd": 5575.11, "bills_ytd": 168}, {"code": "143", "name": "ทุ่งมะพร้าว", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 24.0, "sales_jul": 602.0, "qty_ytd": 197.0, "sales_ytd": 5541.77, "bills_ytd": 168}, {"code": "134", "name": "หัวไทร", "dm": "สุชาวดี บัวเผียน", "dm_code": "1267", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 13.0, "sales_jul": 294.79, "qty_ytd": 209.0, "sales_ytd": 5503.32, "bills_ytd": 190}, {"code": "186", "name": "บ้านปริก", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 19.0, "sales_jul": 543.0, "qty_ytd": 208.0, "sales_ytd": 5473.86, "bills_ytd": 186}, {"code": "188", "name": "คูเต่า", "dm": "วรรณนภา ยอดแก้ว", "dm_code": "1242", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 14.0, "sales_jul": 566.0, "qty_ytd": 174.0, "sales_ytd": 5344.57, "bills_ytd": 142}, {"code": "088", "name": "ในลึก", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 16.0, "sales_jul": 505.0, "qty_ytd": 183.0, "sales_ytd": 5157.06, "bills_ytd": 165}, {"code": "124", "name": "ทะเลน้อย", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 8.0, "sales_jul": 254.31, "qty_ytd": 178.0, "sales_ytd": 5115.3, "bills_ytd": 147}, {"code": "115", "name": "บายพาสพัทลุง", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 11.0, "sales_jul": 376.0, "qty_ytd": 181.0, "sales_ytd": 5074.38, "bills_ytd": 145}, {"code": "202", "name": "บ้านแหลม (พบ-2)", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 11.0, "sales_jul": 357.96, "qty_ytd": 166.0, "sales_ytd": 4884.86, "bills_ytd": 151}, {"code": "163", "name": "ท่าข้าม", "dm": "ธัญชนก นันทสุคนธ์", "dm_code": "1238", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 11.0, "sales_jul": 352.0, "qty_ytd": 165.0, "sales_ytd": 4884.23, "bills_ytd": 151}, {"code": "175", "name": "ร่อนทอง", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 11.0, "sales_jul": 349.0, "qty_ytd": 197.0, "sales_ytd": 4847.39, "bills_ytd": 171}, {"code": "215", "name": "ซอย1 วค.สุราษฎร์ (สฎ-42)", "dm": "ญาณิศา แด่หวา", "dm_code": "1379", "rm": "จินตนา อินทะเสโน", "rm_code": "36299", "qty_jul": 12.0, "sales_jul": 350.0, "qty_ytd": 185.0, "sales_ytd": 4809.75, "bills_ytd": 179}, {"code": "206", "name": "โคกหนามแท่ง (สบ-1)", "dm": "อุษา ทองมาก", "dm_code": "1189", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 11.0, "sales_jul": 365.89, "qty_ytd": 118.0, "sales_ytd": 4502.89, "bills_ytd": 99}, {"code": "159", "name": "ศรีบรรพต", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 8.0, "sales_jul": 219.0, "qty_ytd": 141.0, "sales_ytd": 4233.07, "bills_ytd": 117}, {"code": "081", "name": "ซีเฟรซ", "dm": "วิไลลักษณ์ เลิศไกร", "dm_code": "1336", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 9.0, "sales_jul": 291.0, "qty_ytd": 143.0, "sales_ytd": 4146.4, "bills_ytd": 122}, {"code": "072", "name": "ท่าทองใหม่", "dm": "เรวดี พรหมอินทร์", "dm_code": "1268", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 12.0, "sales_jul": 336.32, "qty_ytd": 134.0, "sales_ytd": 4021.38, "bills_ytd": 122}, {"code": "148", "name": "ละงู", "dm": "ลัดดาวรรณ์ สามารถ", "dm_code": "1188", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 2.0, "sales_jul": 132.61, "qty_ytd": 115.0, "sales_ytd": 4005.78, "bills_ytd": 95}, {"code": "234", "name": "ตลาดโรงสี (อย-4)", "dm": "อุษา ทองมาก", "dm_code": "1189", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 17.0, "sales_jul": 609.0, "qty_ytd": 133.0, "sales_ytd": 3973.0, "bills_ytd": 120}, {"code": "162", "name": "โพหัก", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 6.0, "sales_jul": 131.97, "qty_ytd": 101.0, "sales_ytd": 3491.16, "bills_ytd": 96}, {"code": "236", "name": "ดอนตะโก(รบ-6)", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 5.0, "sales_jul": 187.62, "qty_ytd": 116.0, "sales_ytd": 3464.97, "bills_ytd": 98}, {"code": "220", "name": "ไร่ขิง (นฐ-3)", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 10.0, "sales_jul": 327.98, "qty_ytd": 91.0, "sales_ytd": 3449.45, "bills_ytd": 69}, {"code": "227", "name": "ห้วยทราย(สบ-5)", "dm": "อุษา ทองมาก", "dm_code": "1189", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 16.0, "sales_jul": 402.72, "qty_ytd": 143.0, "sales_ytd": 3336.38, "bills_ytd": 111}, {"code": "224", "name": "หนองปลาหมอ (สบ-3)", "dm": "อุษา ทองมาก", "dm_code": "1189", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 4.0, "sales_jul": 126.0, "qty_ytd": 98.0, "sales_ytd": 3166.32, "bills_ytd": 88}, {"code": "155", "name": "ร่อนพิบูลย์", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 15.0, "sales_jul": 307.65, "qty_ytd": 126.0, "sales_ytd": 3123.51, "bills_ytd": 110}, {"code": "207", "name": "ดอนยายหอม (นฐ-2)", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 5.0, "sales_jul": 207.0, "qty_ytd": 89.0, "sales_ytd": 3106.99, "bills_ytd": 73}, {"code": "190", "name": "สวนหลวง(สค-4)", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 9.0, "sales_jul": 202.91, "qty_ytd": 113.0, "sales_ytd": 3106.77, "bills_ytd": 80}, {"code": "216", "name": "เลียบทางรถไฟ (อย-2)", "dm": "อุษา ทองมาก", "dm_code": "1189", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 7.0, "sales_jul": 291.0, "qty_ytd": 100.0, "sales_ytd": 3033.35, "bills_ytd": 94}, {"code": "178", "name": "บ้านไร่ชาวเหนือ", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 9.0, "sales_jul": 280.59, "qty_ytd": 88.0, "sales_ytd": 2711.13, "bills_ytd": 80}, {"code": "181", "name": "ห้วยตะโก", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 14.0, "sales_jul": 351.0, "qty_ytd": 82.0, "sales_ytd": 2704.16, "bills_ytd": 73}, {"code": "238", "name": "ภูธร 8 (สฎ-45)", "dm": "ปาลิตา ศรีปัญญา", "dm_code": "1217", "rm": "สุพรรษา นามตาปี", "rm_code": "36285", "qty_jul": 27.0, "sales_jul": 616.44, "qty_ytd": 109.0, "sales_ytd": 2502.14, "bills_ytd": 103}, {"code": "217", "name": "ช่องสะแก (พบ-3)", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 0.0, "sales_jul": 0.0, "qty_ytd": 70.0, "sales_ytd": 2075.35, "bills_ytd": 54}, {"code": "180", "name": "เมืองพัทลุง", "dm": "ชณารัศมิ์ พลเดช", "dm_code": "1293", "rm": "จริยา รัตนติน", "rm_code": "36311", "qty_jul": 2.0, "sales_jul": 30.0, "qty_ytd": 74.0, "sales_ytd": 1988.25, "bills_ytd": 62}, {"code": "158", "name": "บ้านบ่อ", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 1.0, "sales_jul": 11.0, "qty_ytd": 47.0, "sales_ytd": 1694.84, "bills_ytd": 47}, {"code": "201", "name": "โพไร่หวาน (พบ-1)", "dm": "วรุตม์ คงมั่น", "dm_code": "1381", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 10.0, "sales_jul": 288.0, "qty_ytd": 65.0, "sales_ytd": 1668.63, "bills_ytd": 61}, {"code": "221", "name": "โกรกกราก (สค-5)", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 6.0, "sales_jul": 309.0, "qty_ytd": 39.0, "sales_ytd": 1623.03, "bills_ytd": 35}, {"code": "187", "name": "ท่าทราย", "dm": "จันทรัตน์ เปรมปรี", "dm_code": "1386", "rm": "ฐานพัฒน์ แสงจง", "rm_code": "39209", "qty_jul": 3.0, "sales_jul": 44.0, "qty_ytd": 44.0, "sales_ytd": 1410.78, "bills_ytd": 40}], "dm": [{"dm_code": "1188", "dm": "ลัดดาวรรณ์ สามารถ", "qty_jul": 555.0, "sales_jul": 16875.18, "qty_ytd": 10792.0, "sales_ytd": 313294.43}, {"dm_code": "1352", "dm": "ณัฐกมล พิมเสน", "qty_jul": 567.0, "sales_jul": 18370.33, "qty_ytd": 9179.0, "sales_ytd": 265580.94}, {"dm_code": "1231", "dm": "แพรทิพย์ จันทร์ปาน", "qty_jul": 448.0, "sales_jul": 13036.18, "qty_ytd": 8367.0, "sales_ytd": 239447.39}, {"dm_code": "1379", "dm": "ญาณิศา แด่หวา", "qty_jul": 590.0, "sales_jul": 19483.91, "qty_ytd": 8016.0, "sales_ytd": 229660.31}, {"dm_code": "1238", "dm": "ธัญชนก นันทสุคนธ์", "qty_jul": 605.0, "sales_jul": 18781.88, "qty_ytd": 7332.0, "sales_ytd": 205187.82}, {"dm_code": "1287", "dm": "มณฑา กู้เกียรติเดชสกุล", "qty_jul": 503.0, "sales_jul": 18399.18, "qty_ytd": 6042.0, "sales_ytd": 192580.59}, {"dm_code": "1336", "dm": "วิไลลักษณ์ เลิศไกร", "qty_jul": 436.0, "sales_jul": 13776.8, "qty_ytd": 6328.0, "sales_ytd": 182285.78}, {"dm_code": "1268", "dm": "เรวดี พรหมอินทร์", "qty_jul": 495.0, "sales_jul": 14698.28, "qty_ytd": 6226.0, "sales_ytd": 180837.29}, {"dm_code": "1267", "dm": "สุชาวดี บัวเผียน", "qty_jul": 343.0, "sales_jul": 11615.53, "qty_ytd": 6092.0, "sales_ytd": 177220.5}, {"dm_code": "1217", "dm": "ปาลิตา ศรีปัญญา", "qty_jul": 445.0, "sales_jul": 13005.01, "qty_ytd": 5689.0, "sales_ytd": 163388.6}, {"dm_code": "1242", "dm": "วรรณนภา ยอดแก้ว", "qty_jul": 222.0, "sales_jul": 7776.38, "qty_ytd": 4178.0, "sales_ytd": 127697.42}, {"dm_code": "1381", "dm": "วรุตม์ คงมั่น", "qty_jul": 211.0, "sales_jul": 5829.3, "qty_ytd": 3597.0, "sales_ytd": 104946.52}, {"dm_code": "1293", "dm": "ชณารัศมิ์ พลเดช", "qty_jul": 219.0, "sales_jul": 6591.38, "qty_ytd": 3638.0, "sales_ytd": 103314.77}, {"dm_code": "1386", "dm": "จันทรัตน์ เปรมปรี", "qty_jul": 157.0, "sales_jul": 4654.41, "qty_ytd": 1928.0, "sales_ytd": 57282.64}, {"dm_code": "1189", "dm": "อุษา ทองมาก", "qty_jul": 130.0, "sales_jul": 3934.39, "qty_ytd": 1569.0, "sales_ytd": 47691.03}], "rm": [{"rm_code": "36299", "rm": "จินตนา อินทะเสโน", "qty_jul": 2210.0, "sales_jul": 69672.29, "qty_ytd": 32894.0, "sales_ytd": 939876.46}, {"rm_code": "36285", "rm": "สุพรรษา นามตาปี", "qty_jul": 1931.0, "sales_jul": 58355.28, "qty_ytd": 29035.0, "sales_ytd": 839806.1}, {"rm_code": "36311", "rm": "จริยา รัตนติน", "qty_jul": 1287.0, "sales_jul": 44382.47, "qty_ytd": 19950.0, "sales_ytd": 600813.28}, {"rm_code": "39209", "rm": "ฐานพัฒน์ แสงจง", "qty_jul": 498.0, "sales_jul": 14418.1, "qty_ytd": 7094.0, "sales_ytd": 209920.19}]}</script>
+<script>
+const DATA = JSON.parse(document.getElementById('dashboard-data').textContent);
+
+function fmtNum(n, d=0) {
+  if (n === null || n === undefined) return '-';
+  return Number(n).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
+}
+function fmtBaht(n) { return fmtNum(n, 2); }
+
+// ---------- Export helpers ----------
+function exportExcel(tableId, filename) {
+  const table = document.getElementById(tableId);
+  const wb = XLSX.utils.table_to_book(table, {sheet: 'Sheet1'});
+  XLSX.writeFile(wb, filename + '.xlsx');
+}
+function exportPDF(sectionId) {
+  document.querySelectorAll('.section, .flex-row').forEach(el => el.classList.remove('print-target'));
+  const el = document.getElementById(sectionId);
+  el.classList.add('print-target');
+  window.print();
+  setTimeout(() => el.classList.remove('print-target'), 500);
+}
+
+// ---------- KPI ----------
+function renderKPI() {
+  const monthly = DATA.monthly;
+  const jul26 = monthly.find(m => m.ym === '2026-07');
+  const jul25 = monthly.find(m => m.ym === '2025-07');
+  const ytdSales = monthly.reduce((a,m)=>a+m.sales,0);
+  const ytdQty = monthly.reduce((a,m)=>a+m.qty,0);
+  const growth = jul25 && jul25.sales>0 ? ((jul26.sales - jul25.sales)/jul25.sales*100) : null;
+  const kpis = [
+    {label:'ยอดขาย ก.ค. 2569 (ถึง 15 ก.ค.)', value: '฿'+fmtBaht(jul26.sales), sub: 'จำนวน '+fmtNum(jul26.qty)+' ชิ้น'},
+    {label:'ยอดขายสะสม ม.ค.68–ก.ค.69', value: '฿'+fmtBaht(ytdSales), sub: 'จำนวน '+fmtNum(ytdQty)+' ชิ้น'},
+    {label:'% Growth YoY (ก.ค. เทียบ ก.ค.)', value: growth!==null ? (growth>=0?'+':'')+fmtNum(growth,1)+'%' : '-', sub:'ก.ค.68 = ฿'+fmtBaht(jul25?jul25.sales:0), cls: growth>=0?'growth-pos':'growth-neg'},
+    {label:'จำนวน SKU ในกลุ่มยาสมุนไพร', value: fmtNum(DATA.products.length), sub:'สินค้า (parcode)'},
+    {label:'จำนวนสาขาที่ขายยาสมุนไพร', value: fmtNum(DATA.branches.filter(b=>!b.name.startsWith('(ไม่พบ')).length), sub:'สาขา (ไม่รวมช่องทางพิเศษ)'},
+  ];
+  const row = document.getElementById('kpiRow');
+  row.innerHTML = kpis.map(k => `
+    <div class="kpi">
+      <div class="label">${k.label}</div>
+      <div class="value ${k.cls||''}">${k.value}</div>
+      <div class="sub">${k.sub}</div>
+    </div>`).join('');
+  document.getElementById('subtitle').textContent = 'ข้อมูลจริงจาก fact_sales x dim_product (กลุ่ม 02038 ยา/ยาสมุนไพร) x dim_branch | อัปเดตข้อมูลถึง 15-07-2026';
+}
+
+// ---------- Trend chart ----------
+function renderTrend() {
+  const m2025 = Array(12).fill(null);
+  const m2026 = Array(12).fill(null);
+  DATA.monthly.forEach(r => {
+    const [y, mo] = r.ym.split('-');
+    const idx = parseInt(mo,10)-1;
+    if (y==='2025') m2025[idx] = r.sales;
+    if (y==='2026') m2026[idx] = r.sales;
+  });
+  const labels = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {label:'ปี 2568 (2025)', data:m2025, borderColor:'#94a3b8', backgroundColor:'transparent', tension:0.3},
+        {label:'ปี 2569 (2026)', data:m2026, borderColor:'#22d3ee', backgroundColor:'rgba(34,211,238,0.1)', tension:0.3, fill:true},
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#e2e8f0'}}},
+      scales:{
+        x:{ticks:{color:'#94a3b8'}, grid:{color:'#334155'}},
+        y:{ticks:{color:'#94a3b8', callback:(v)=>fmtNum(v)}, grid:{color:'#334155'}}
+      }
+    }
+  });
+}
+
+// ---------- Product table ----------
+let prodPeriod = 'jul';
+let prodSort = {key:'sales_' + prodPeriod, dir:-1};
+function renderProdTable() {
+  const q = document.getElementById('prodSearch').value.trim().toLowerCase();
+  let rows = DATA.products.filter(p => !q || p.idesc.toLowerCase().includes(q) || p.iprod.includes(q));
+  const salesKey = 'sales_' + prodPeriod, qtyKey = 'qty_' + prodPeriod;
+  rows.sort((a,b) => (a[prodSort.key]-b[prodSort.key])*prodSort.dir);
+  let html = `<thead><tr>
+    <th class="num">#</th>
+    <th data-key="iprod">Parcode</th>
+    <th data-key="idesc">ชื่อสินค้า</th>
+    <th class="num" data-key="${qtyKey}">จำนวน (ชิ้น)</th>
+    <th class="num" data-key="${salesKey}">ยอดขาย (บาท)</th>
+    <th class="num" data-key="onhand">Onhand</th>
+    <th class="num" data-key="cover_months">Stock Cover (เดือน)</th>
+    <th>สถานะสต็อก</th>
+  </tr></thead><tbody>`;
+  rows.forEach((p,i) => {
+    let badge = '';
+    if (p.cover_months === null) badge = p[qtyKey]>0 ? '' : '<span class="badge badge-warn">ไม่มีการขาย</span>';
+    else if (p.cover_months > 12) badge = '<span class="badge badge-warn">สต็อกค้างนาน</span>';
+    else if (p.cover_months < 2) badge = '<span class="badge badge-ok">ขายเร็ว/เสี่ยงขาด</span>';
+    else badge = '<span class="badge badge-watch">ปกติ</span>';
+    html += `<tr>
+      <td class="rank">${i+1}</td>
+      <td class="text-cell">${p.iprod}</td>
+      <td class="text-cell">${p.idesc}</td>
+      <td class="num">${fmtNum(p[qtyKey])}</td>
+      <td class="num">${fmtBaht(p[salesKey])}</td>
+      <td class="num">${fmtNum(p.onhand)}</td>
+      <td class="num">${p.cover_months===null?'-':fmtNum(p.cover_months,1)}</td>
+      <td>${badge}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('prodTable').innerHTML = html;
+  attachSort('prodTable', prodSort, renderProdTable, (k)=>{prodSort.key=k;});
+}
+
+// ---------- Branch table ----------
+let branchPeriod = 'jul';
+let branchSort = {key:'sales_'+branchPeriod, dir:-1};
+function populateFilters() {
+  const dmSel = document.getElementById('dmFilter');
+  const rmSel = document.getElementById('rmFilter');
+  const dms = [...new Set(DATA.branches.map(b=>b.dm).filter(x=>x && x!=='-'))].sort();
+  const rms = [...new Set(DATA.branches.map(b=>b.rm).filter(x=>x && x!=='-'))].sort();
+  dms.forEach(d => dmSel.insertAdjacentHTML('beforeend', `<option value="${d}">${d}</option>`));
+  rms.forEach(r => rmSel.insertAdjacentHTML('beforeend', `<option value="${r}">${r}</option>`));
+}
+function renderBranchTable() {
+  const dmF = document.getElementById('dmFilter').value;
+  const rmF = document.getElementById('rmFilter').value;
+  let rows = DATA.branches.filter(b => (!dmF || b.dm===dmF) && (!rmF || b.rm===rmF));
+  const salesKey = 'sales_'+branchPeriod, qtyKey='qty_'+branchPeriod;
+  rows.sort((a,b)=>(a[branchSort.key]-b[branchSort.key])*branchSort.dir);
+  let html = `<thead><tr>
+    <th class="num">#</th>
+    <th data-key="code">รหัส</th>
+    <th data-key="name">สาขา</th>
+    <th data-key="dm">DM</th>
+    <th data-key="rm">RM</th>
+    <th class="num" data-key="${qtyKey}">จำนวน (ชิ้น)</th>
+    <th class="num" data-key="${salesKey}">ยอดขาย (บาท)</th>
+    <th class="num" data-key="bills_ytd">จำนวนบิล (สะสม)</th>
+  </tr></thead><tbody>`;
+  rows.forEach((b,i) => {
+    html += `<tr>
+      <td class="rank">${i+1}</td>
+      <td class="text-cell">${b.code}</td>
+      <td class="text-cell">${b.name}</td>
+      <td class="text-cell">${b.dm}</td>
+      <td class="text-cell">${b.rm}</td>
+      <td class="num">${fmtNum(b[qtyKey])}</td>
+      <td class="num">${fmtBaht(b[salesKey])}</td>
+      <td class="num">${fmtNum(b.bills_ytd)}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById('branchTable').innerHTML = html;
+  attachSort('branchTable', branchSort, renderBranchTable, (k)=>{branchSort.key=k;});
+}
+
+// ---------- DM / RM tables ----------
+function renderRollupTable(elId, list, nameKey) {
+  let rows = [...list].sort((a,b)=>b.sales_ytd-a.sales_ytd);
+  let html = `<thead><tr>
+    <th class="num">#</th><th>${nameKey==='dm'?'DM':'RM'}</th>
+    <th class="num">จำนวน ก.ค. (ชิ้น)</th><th class="num">ยอดขาย ก.ค. (บาท)</th>
+    <th class="num">จำนวนสะสม (ชิ้น)</th><th class="num">ยอดขายสะสม (บาท)</th>
+  </tr></thead><tbody>`;
+  rows.forEach((r,i) => {
+    html += `<tr>
+      <td class="rank">${i+1}</td>
+      <td class="text-cell">${r[nameKey]}</td>
+      <td class="num">${fmtNum(r.qty_jul)}</td>
+      <td class="num">${fmtBaht(r.sales_jul)}</td>
+      <td class="num">${fmtNum(r.qty_ytd)}</td>
+      <td class="num">${fmtBaht(r.sales_ytd)}</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  document.getElementById(elId).innerHTML = html;
+}
+
+// ---------- generic sort ----------
+function attachSort(tableId, sortState, rerender, setKey) {
+  const table = document.getElementById(tableId);
+  table.querySelectorAll('th[data-key]').forEach(th => {
+    th.onclick = () => {
+      const k = th.getAttribute('data-key');
+      if (sortState.key === k) sortState.dir *= -1; else { sortState.key = k; sortState.dir = -1; }
+      setKey(k);
+      rerender();
+    };
+  });
+}
+
+// ---------- init ----------
+renderKPI();
+renderTrend();
+populateFilters();
+renderProdTable();
+renderBranchTable();
+renderRollupTable('dmTable', DATA.dm, 'dm');
+renderRollupTable('rmTable', DATA.rm, 'rm');
+document.getElementById('analysisContent').innerHTML = `
+<p>จากข้อมูลยอดขายกลุ่มยาสมุนไพร (53 SKU: ยาหม่อง ยาดม น้ำมันนวด พิมเสน พลาสเตอร์บรรเทาปวด) ตลอด 19 เดือน (ม.ค. 2568 – ก.ค. 2569 ถึงวันที่ 15) รวมยอดขาย ฿2,594,557 ใน 203 สาขาจริง (ตัดรหัสที่ไม่ใช่สาขาหน้าร้าน เช่น 901, 902, 213, 230, 205, 999 ออกแล้ว) ที่น่าสังเกตคือยอดขายเดือน มี.ค.–มิ.ย. 2569 เพิ่มขึ้นเกือบ 3 เท่าจากช่วงก่อนหน้า (จาก ~฿90,000/เดือน เป็น ~฿250,000-345,000/เดือน) ควรตรวจสอบว่ามาจากแคมเปญส่งเสริมการขายหรือการเพิ่มสาขาที่ขายสินค้ากลุ่มนี้</p>
+
+<h3>สินค้าขายดี Top 3</h3>
+<ul>
+<li><b>ยาหม่องตราละอองไพร (ขาว/ขียว/เหลือง 45g.)</b> ทั้ง 3 สี ทำยอดขายสะสมรวมกัน ฿1,032,236 (คิดเป็น ~40% ของยอดขายทั้งหมด) โดยสีเขียวขายดีสุด ฿367,470 Stock Cover 3.4-6.9 เดือน อยู่ในเกณฑ์ปกติถึงหมุนเร็ว</li>
+<li><b>ยาดมสมุนไพร5g.ตราหนุมาน</b> (8857200535366) ยอดขายสะสม ฿292,837 แต่ Stock Cover 13.1 เดือนเริ่มสูงกว่าเกณฑ์ ควรชะลอการสั่งเพิ่ม</li>
+<li><b>ยาดมสมุนไพร2g.(หนุมาน)</b> (8857128671009) ขายได้มากที่สุดในกลุ่ม 14,267 ชิ้น ยอดขาย ฿213,060 Stock Cover เพียง 4.1 เดือน หมุนเร็วมาก ควรเฝ้าระวังสต็อกขาด</li>
+</ul>
+
+<h3>สินค้าสต็อกค้างนาน ควรพิจารณาระบายสต็อก</h3>
+<ul>
+<li><b>ยาหอมเทพจิตรตราห้าม้าชนิดเม็ด(เล็ก)</b> (885670150018) มี Onhand 5,039 ชิ้น แต่ขายได้เพียง 2 ชิ้นตลอด 19 เดือน (Stock Cover เกือบ 4,000 ปี) เป็นสต็อกตายสนิท ควรตัดขายเลหรือเลิกสั่งซื้อทันที</li>
+<li><b>น้ำมันนวด 50ml. (GoldenHorse และ วังพญางู)</b> ทั้งสองรายการมี Onhand ราว 3,200 ชิ้น แต่ขายได้เพียง 72 ชิ้นรวมทั้งปี (Cover ~850 เดือน) ชี้ว่าดีมานด์กลุ่มน้ำมันนวดขวดนี้ต่ำกว่าที่สต็อกไว้มาก</li>
+<li><b>ยาหม่องขาว/เหลือง 50g. ตราดอกบัวสี และ ยาหม่องโอสถคละสี(มหาจักร)</b> มี Cover 385-507 เดือน ควรพิจารณาโปรโมชั่นรวมชุดหรือกระจายไปสาขาที่มีดีมานด์</li>
+</ul>
+
+<h3>ความเหลื่อมล้ำระหว่างสาขา</h3>
+<p>สาขาที่ขายดีที่สุดคือ <b>คลองเขม้า</b> (฿62,441) ตามด้วย <b>เกาะลันตา</b> (฿57,873) และ <b>เกาะลันตา 2</b> (฿53,141) ซึ่งทั้งสามอยู่ในโซน DM ลัดดาวรรณ์ สามารถ/ณัฐกมล พิมเสน และ RM สุพรรษา นามตาปี/จินตนา อินทะเสโน ขณะที่สาขาต่ำสุดอย่าง <b>ท่าทราย</b> ทำได้เพียง ฿1,411 ต่างกันกว่า 44 เท่า ควรทบทวนการจัดวางสินค้ากลุ่มยาสมุนไพรในสาขาที่ยอดต่ำ</p>
+
+<h3>ความเหลื่อมล้ำระหว่าง RM</h3>
+<p>RM ที่ทำยอดขายสูงสุดคือ <b>จินตนา อินทะเสโน</b> ฿939,876 ตามด้วย <b>สุพรรษา นามตาปี</b> ฿839,806 และ <b>จริยา รัตนติน</b> ฿600,813 ส่วน <b>ฐานพัฒน์ แสงจง</b> ทำได้ต่ำสุดที่ ฿209,920 (ต่ำกว่าอันดับ 1 ถึง 4.5 เท่า) เช่นเดียวกับรูปแบบที่พบในกลุ่มเกษตร ชี้ว่าโซนนี้อาจมีฐานลูกค้าต่างจากพื้นที่อื่น หรือควรเสริมการวางสินค้ากลุ่มยาสมุนไพรเพิ่มเติม</p>
+
+<h3>ข้อเสนอแนะ</h3>
+<ul>
+<li>เร่งจัดการสต็อกตาย <b>ยาหอมเทพจิตรตราห้าม้า(เล็ก)</b> และ <b>น้ำมันนวด 50ml. ทั้ง 2 สูตร</b> ก่อนเป็นอันดับแรก เพราะแทบไม่มีการเคลื่อนไหวเลยตลอด 19 เดือน</li>
+<li>เติมสต็อก <b>ยาดมสมุนไพร2g.(หนุมาน)</b> และ <b>ยาหม่องตราละอองไพร</b> อย่างต่อเนื่อง เพราะเป็นกลุ่มขายดีที่หมุนเร็ว</li>
+<li>ตรวจสอบสาเหตุยอดขายพุ่งขึ้น 3 เท่าตั้งแต่ มี.ค. 2569 เพื่อวางแผนสต็อกรองรับหากเป็นแนวโน้มต่อเนื่อง ไม่ใช่แคมเปญระยะสั้น</li>
+<li>ศึกษาสูตรสำเร็จของสาขาโซนเกาะลันตา/คลองเขม้า (RM สุพรรษา/จินตนา) เพื่อนำไปปรับใช้กับสาขาโซน RM ฐานพัฒน์ แสงจง ที่ยอดขายต่ำสุด</li>
+</ul>
+`;
+
+document.getElementById('prodSearch').addEventListener('input', renderProdTable);
+document.getElementById('dmFilter').addEventListener('change', renderBranchTable);
+document.getElementById('rmFilter').addEventListener('change', renderBranchTable);
+
+document.querySelectorAll('#periodToggleProd button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#periodToggleProd button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    prodPeriod = btn.getAttribute('data-period');
+    prodSort.key = 'sales_' + prodPeriod;
+    renderProdTable();
+  });
+});
+document.querySelectorAll('#periodToggleBranch button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#periodToggleBranch button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    branchPeriod = btn.getAttribute('data-period');
+    branchSort.key = 'sales_' + branchPeriod;
+    renderBranchTable();
+  });
+});
+</script>
+
+</body>
+</html>
