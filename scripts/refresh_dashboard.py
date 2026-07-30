@@ -321,7 +321,7 @@ PATCHES = [
     ),
     (
         "{label:'🚀 % Growth YoY (ก.ค. เทียบ ก.ค.)', value: growth!==null ? (growth>=0?'+':'')+fmtNum(growth,1)+'%' : '-', sub:'ก.ค.68 = ฿'+fmtBaht(jul25?jul25.sales:0), cls: growth>=0?'growth-pos':'growth-neg'},",
-        "{label:'🚀 % Growth YoY (' + thFull(latestYm).split(' ')[0] + ' เทียบปีก่อน)', value: growth!==null ? (growth>=0?'+':'')+fmtNum(growth,1)+'%' : '-', sub: thShort(prevYm)+' = ฿'+fmtBaht(jul25?jul25.sales:0), cls: growth>=0?'growth-pos':'growth-neg'},
+        "{label:'🚀 % Growth YoY (' + thFull(latestYm).split(' ')[0] + ' เทียบปีก่อน)', value: growth!==null ? (growth>=0?'+':'')+fmtNum(growth,1)+'%' : '-', sub: thShort(prevYm)+' = ฿'+fmtBaht(jul25?jul25.sales:0), cls: growth>=0?'growth-pos':'growth-neg'},",
     ),
     (
         '<div class="note">หมายเหตุ: ยอดเดือน ก.ค. 2569 เป็นข้อมูลถึงวันที่ 20 ก.ค. เท่านั้น (ครึ่งเดือน) ไม่ควรเทียบตรงกับเดือนเต็ม</div>',
